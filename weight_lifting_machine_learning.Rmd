@@ -1,0 +1,94 @@
+---
+title: "Weight Lifting Machine Learning"
+output: html_document
+---
+
+Abstract
+========
+
+Companies such as JawBone, Nike, and FitBit have produced a set of wearable accelerometers, useful for determining how well weightlifters perform proper movements when exercising.  As an experiment, six weightlifters were asked to use a set of accelerometers and perform certain lifts in correct and incorrect ways.  Consequently, the data from the accelerometers can potentially be used to assess the weightlifting form of other users wearing the accelerometers.  This paper discusses two potential models for predicting what specific set of movements a weightlifter may be performing based upon accelerometer measurements-a decision tree model and a random forest model.  The decision tree model was not a useful model, but the random forest model produced excellent results.
+
+Discussion
+==========
+
+```{r echo=FALSE}
+setwd("D:/Coursera/8_MachineLearning/project")
+options(warn=-1)
+```
+To generate the model discussed in this paper, the caret and randomForest R libraries were used.
+```{r}
+library(caret)
+library(randomForest)
+```
+The training data contained 19,622 observations, each assigned to one of five types of lifting motions.  The data contain 160 variables, but many variables were removed before processing for two reasons.  The first reason was that some variables were merely metadata that were not relevant to generating a model. The other reason is that some variables were mostly missing values, as those variables were really summaries of many other rows of data.  Consequently, they did not contain data for every observation, and inclusion of those variables in the final model would be misleading.
+```{r}
+#Read in the training CSV
+mydf <- read.csv("pml-training.csv", header=TRUE, na.strings = c("NA", ""))
+
+#Filter out the non-data columns
+mydf <- mydf[,8:ncol(mydf)]
+
+#Filter out the "summary" columns that do not contain data for every row
+mydf <- mydf[,colSums(is.na(mydf))==0]
+```
+The classe variable contained the information that the model was intended to predict: the specific set of motions the test subject was asked to perform for that observation.
+
+```{r echo=FALSE}
+barplot(table(mydf$classe), main="Distribution of Motion Set Types", xlab="Motion Set Type", ylab="Count", ylim=c(0,max(table(mydf$classe))))
+```
+
+Though there are significantly more motion sets of class "A" than the other classes, each class appears more than 3000 times in the dataset.  Consequently, any model trained on a subset of the data is likely to have enough representative rows from each class to be trained effectively.
+```{r}
+#Set a seed
+set.seed(1000)
+
+#Partition the data into training and testing sets
+inTrain <- createDataPartition(y=mydf$classe,p=0.7,list=FALSE)
+training <- mydf[inTrain,]
+testing <- mydf[-inTrain,]
+```
+The data were partitioned into training (70%) and testing (30%) sets.
+
+Decision Tree Model
+===================
+The first type of model chosen was a decision tree model.  10-fold cross validation was used as part of the training process.
+```{r}
+#Set the trainControl parameter to do 10-fold cross validation
+tc <- trainControl("cv",10)
+
+#Now create the model using all variables
+modFit <- train(classe~., method="rpart", data=training)
+modFit$finalModel
+```
+The partition tree model does not appear to be particularly accurate for the "A", "C", and "D" classes.
+```{r}
+#Test the model on the testing dataset.
+predvals <- predict(modFit,testing)
+confusionMatrix(predvals,testing$classe)
+```
+The accuracy of this decision tree model is only 50.4%, a disappointing result.
+
+Random Forest Model
+===================
+Next, a random forest model was created using all of the variables.  Random Forests do not require separate cross validation procedures.
+```{r}
+#A random forest with all the variables.  randomForest does not require cross validation.
+modFit <- randomForest(classe~.,data=training, ntree=500)
+modFit
+```
+The random forest model produced an extremely accurate classification of the training dataset.
+```{r}
+#Test it against the testing dataset.
+predvals <- predict(modFit,testing)
+confusionMatrix(predvals,testing$classe)
+```
+The accuracy of the random forest model on the testing dataset was 99.5%, an excellent result.
+```{r}
+#Get the table of variable importances
+as.data.frame(modFit$importance[order(-modFit$importance),])
+```
+The table shows us how important each variable is in the final model.
+
+Conclusion
+==========
+The decision tree model demonstrated an accuracy of only 50.4%-better than a random classification, but not especially reliable or useful.  The random forest model, however, was much more accurate, producing a classification accuracy of 99.5%.  Further testing on additional data would be useful for improving the models ever further.
